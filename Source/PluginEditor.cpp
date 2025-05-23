@@ -5,7 +5,6 @@
 
   ==============================================================================
 */
-
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
@@ -20,61 +19,88 @@ void LookAndFeel::drawRotarySlider(juce::Graphics & g,
                                    juce::Slider & slider)
 {
     using namespace juce;
-    
+
     auto bounds = Rectangle<float>(x, y, width, height);
-    
-    g.setColour(Colour(97u, 18u, 167u));
+
+    g.setColour(Colour(40u, 40u, 40u));
     g.fillEllipse(bounds);
-    g.setColour(Colour(48u, 9u, 84u));
-    
+
+    g.setColour(Colour(60u, 60u, 60u));
+    g.drawEllipse(bounds, 1.0f);
+
+    Path backgroundArc;
+    backgroundArc.addCentredArc(bounds.getCentreX(),
+                                bounds.getCentreY(),
+                                bounds.getWidth() * 0.4f,
+                                bounds.getHeight() * 0.4f,
+                                0.0f,
+                                rotaryStartAngle,
+                                rotaryEndAngle,
+                                true);
+
+    g.setColour(Colour(25u, 25u, 25u));
+    g.strokePath(backgroundArc, PathStrokeType(3.0f));
+
     if (auto* rswl = dynamic_cast<RotarySliderWithLabels*>(&slider))
     {
         auto centre = bounds.getCentre();
+        auto radius = bounds.getWidth() * 0.4f;
+
+        Path valueArc;
+        valueArc.addCentredArc(bounds.getCentreX(),
+                               bounds.getCentreY(),
+                               radius,
+                               radius,
+                               0.0f,
+                               rotaryStartAngle,
+                               jmap(sliderPosProportional, 0.f, 1.f, rotaryStartAngle, rotaryEndAngle),
+                               true);
+
+        g.setColour(Colour(0u, 172u, 1u));
+        g.strokePath(valueArc, PathStrokeType(3.0f));
 
         Path p;
-         
         Rectangle<float> r;
-        r.setLeft(centre.getX() - 2);
-        r.setRight(centre.getX() + 2);
-        r.setTop(bounds.getY());
-        r.setBottom(centre.getY() - rswl->getTextHeight() * 1.5);
-        
-        p.addRoundedRectangle(r, 2.f);
+        r.setLeft(centre.getX() - 1.5);
+        r.setRight(centre.getX() + 1.5);
+        r.setTop(bounds.getY() + bounds.getHeight() * 0.1f);
+        r.setBottom(centre.getY() - (rswl->getTextHeight() * 0.5f));
+
+        p.addRoundedRectangle(r, 1.f);
         jassert(rotaryStartAngle < rotaryEndAngle);
-        
+
         auto sliderAngRad = jmap(sliderPosProportional, 0.f, 1.f, rotaryStartAngle, rotaryEndAngle);
         p.applyTransform(AffineTransform().rotated(sliderAngRad, centre.getX(), centre.getY()));
-        
+
+        g.setColour(Colours::lightgrey);
         g.fillPath(p);
-        
+
         g.setFont(rswl->getTextHeight());
         auto text = rswl->getDisplayString();
         auto strWidth = GlyphArrangement::getStringWidth(g.getCurrentFont(), text);
-        
-        r.setSize(strWidth + 4, rswl->getTextHeight() + 2);
-        r.setCentre(bounds.getCentre());
-        
-        g.setColour(Colours::black);
-        g.fillRect(r);
-        
-        g.setColour(Colours::white);
-        g.drawFittedText(text, r.toNearestInt(), juce::Justification::centred, 1);
+
+        Rectangle<float> textBounds;
+        textBounds.setSize(strWidth + 6, rswl->getTextHeight() + 2); // Add a little padding
+        textBounds.setCentre(bounds.getCentreX(), centre.getY() + rswl->getTextHeight() * 0.8f); // Position below the indicator
+
+        g.setColour(Colour(20u, 20u, 20u)); // Dark background for text for contrast
+        g.fillRect(textBounds);
+
+        g.setColour(Colours::white); // White text
+        g.drawFittedText(text, textBounds.toNearestInt(), juce::Justification::centred, 1);
     }
 }
+
 void RotarySliderWithLabels::paint(juce::Graphics &g)
 {
     using namespace juce;
-    
+
     auto startAng = degreesToRadians(180.f + 45.f);
     auto endAng = degreesToRadians(180.f - 45.f) + MathConstants<float>::twoPi;
-    
+
     auto range = getRange();
     auto sliderBounds = getSliderBounds();
-    
-    //g.setColour(Colours::red);
-    //g.drawRect(getLocalBounds());
-    //g.setColour(Colours::yellow);
-    //g.drawRect(sliderBounds);
+
     getLookAndFeel().drawRotarySlider(g,
                                       sliderBounds.getX(),
                                       sliderBounds.getY(),
@@ -84,29 +110,31 @@ void RotarySliderWithLabels::paint(juce::Graphics &g)
                                       startAng,
                                       endAng,
                                       *this);
-    
+
     auto centre = sliderBounds.toFloat().getCentre();
     auto radius = sliderBounds.getWidth() * 0.5f;
-    
-    g.setColour(Colour(0u, 172u, 1u));
+
+    g.setColour(Colours::lightgrey); // Subtle grey for the labels
     g.setFont(getTextHeight());
-    
+
     auto numChoices = labels.size();
     for (int i = 0; i < numChoices; ++i)
     {
         auto pos = labels[i].pos;
         jassert(0.f <= pos);
         jassert(pos <= 1.f);
-        
+
         auto ang = jmap(pos, 0.f, 1.f, startAng, endAng);
-        auto c = centre.getPointOnCircumference(radius + getTextHeight() * 0.5f + 1, ang);
-        
+        // Position labels further out
+        auto c = centre.getPointOnCircumference(radius + getTextHeight() * 1.2f, ang);
+
         Rectangle<float> r;
         auto str = labels[i].label;
         r.setSize(GlyphArrangement::getStringWidth(g.getCurrentFont(), str), getTextHeight());
         r.setCentre(c);
-        r.setY(r.getY() + getTextHeight());
-        
+        // Adjust Y to prevent overlap with the rotary part
+        r.setY(r.getY() + getTextHeight() * 0.2f);
+
         g.drawFittedText(str, r.toNearestInt(), juce::Justification::centred, 1);
     }
 }
@@ -115,48 +143,49 @@ juce::Rectangle<int> RotarySliderWithLabels::getSliderBounds() const
 {
     auto bounds = getLocalBounds();
     auto size = juce::jmin(bounds.getWidth(), bounds.getHeight());
-    
-    size -= getTextHeight() * 2;
+
+    // Make the slider a bit smaller to leave more room for labels
+    size -= getTextHeight() * 3;
     juce::Rectangle<int> r;
     r.setSize(size, size);
-    r.setCentre(bounds.getCentreX(), 0);
-    r.setY(2);
+    r.setCentre(bounds.getCentreX(), bounds.getCentreY() - getTextHeight()); // Center vertically, adjusted for labels
     return r;
 }
+
 juce::String RotarySliderWithLabels::getDisplayString() const
 {
     if (auto* choiceParam = dynamic_cast<juce::AudioParameterChoice*>(param))
         return choiceParam->getCurrentChoiceName();
-    
+
     juce::String str;
     bool addK = false;
-    
+
     if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
     {
         float val = getValue();
-        
+
         if (val > 999.f)
         {
             val /= 1000.f;
             addK = true;
         }
-        
+
         str = juce::String(val, (addK ? 2 : 0));
     }
     else
     {
         jassertfalse;
     }
-    
+
     if (suffix.isNotEmpty())
     {
         str << " ";
         if (addK)
             str << "k";
-        
+
         str << suffix;
     }
-    
+
     return str;
 }
 ResponseCurveComponent::ResponseCurveComponent(BOYDEQAudioProcessor& p) : audioProcessor(p)
@@ -242,7 +271,7 @@ void ResponseCurveComponent::paint (juce::Graphics& g)
         if (!highcut.isBypassed<0>())
             mag *= highcut.get<0>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
         if (!highcut.isBypassed<1>())
-            mag *= lowcut.get<1>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
+            mag *= highcut.get<1>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
         if (!highcut.isBypassed<2>())
             mag *= highcut.get<2>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
         if (!highcut.isBypassed<3>())
