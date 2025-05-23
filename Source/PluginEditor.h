@@ -72,7 +72,7 @@ juce::Timer
     void timerCallback() override;
 
     void paint(juce::Graphics& g) override;
-    //void resized() override;
+    void resized() override;
 private:
     BOYDEQAudioProcessor& audioProcessor;
     juce::Atomic<bool> parametersChanged { false };
@@ -80,6 +80,10 @@ private:
     MonoChain monoChain;
 
     void updateChain();
+    
+    juce::Image background;
+    juce::Rectangle<int> getRenderArea();
+    juce::Rectangle<int> getAnalyticsArea();
 };
 
 class BOYDEQAudioProcessorEditor  : public juce::AudioProcessorEditor

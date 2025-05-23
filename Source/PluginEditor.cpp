@@ -80,13 +80,13 @@ void LookAndFeel::drawRotarySlider(juce::Graphics & g,
         auto strWidth = GlyphArrangement::getStringWidth(g.getCurrentFont(), text);
 
         Rectangle<float> textBounds;
-        textBounds.setSize(strWidth + 6, rswl->getTextHeight() + 2); // Add a little padding
-        textBounds.setCentre(bounds.getCentreX(), centre.getY() + rswl->getTextHeight() * 0.8f); // Position below the indicator
+        textBounds.setSize(strWidth + 6, rswl->getTextHeight() + 2);
+        textBounds.setCentre(bounds.getCentreX(), centre.getY() + rswl->getTextHeight() * 0.8f);
 
-        g.setColour(Colour(20u, 20u, 20u)); // Dark background for text for contrast
+        g.setColour(Colour(20u, 20u, 20u));
         g.fillRect(textBounds);
 
-        g.setColour(Colours::white); // White text
+        g.setColour(Colours::white);
         g.drawFittedText(text, textBounds.toNearestInt(), juce::Justification::centred, 1);
     }
 }
@@ -114,7 +114,7 @@ void RotarySliderWithLabels::paint(juce::Graphics &g)
     auto centre = sliderBounds.toFloat().getCentre();
     auto radius = sliderBounds.getWidth() * 0.5f;
 
-    g.setColour(Colours::lightgrey); // Subtle grey for the labels
+    g.setColour(Colours::lightgrey);
     g.setFont(getTextHeight());
 
     auto numChoices = labels.size();
@@ -125,14 +125,12 @@ void RotarySliderWithLabels::paint(juce::Graphics &g)
         jassert(pos <= 1.f);
 
         auto ang = jmap(pos, 0.f, 1.f, startAng, endAng);
-        // Position labels further out
         auto c = centre.getPointOnCircumference(radius + getTextHeight() * 1.2f, ang);
 
         Rectangle<float> r;
         auto str = labels[i].label;
         r.setSize(GlyphArrangement::getStringWidth(g.getCurrentFont(), str), getTextHeight());
         r.setCentre(c);
-        // Adjust Y to prevent overlap with the rotary part
         r.setY(r.getY() + getTextHeight() * 0.2f);
 
         g.drawFittedText(str, r.toNearestInt(), juce::Justification::centred, 1);
@@ -144,11 +142,10 @@ juce::Rectangle<int> RotarySliderWithLabels::getSliderBounds() const
     auto bounds = getLocalBounds();
     auto size = juce::jmin(bounds.getWidth(), bounds.getHeight());
 
-    // Make the slider a bit smaller to leave more room for labels
     size -= getTextHeight() * 3;
     juce::Rectangle<int> r;
     r.setSize(size, size);
-    r.setCentre(bounds.getCentreX(), bounds.getCentreY() - getTextHeight()); // Center vertically, adjusted for labels
+    r.setCentre(bounds.getCentreX(), bounds.getCentreY() - getTextHeight());
     return r;
 }
 
@@ -236,10 +233,11 @@ void ResponseCurveComponent::updateChain()
 void ResponseCurveComponent::paint (juce::Graphics& g)
 {
     using namespace juce;
-    // (Our component is opaque, so we must completely fill the background with a solid colour)
+
     g.fillAll (Colours::black);
+    g.drawImage(background, getLocalBounds().toFloat());
     
-    auto responseArea = getLocalBounds();
+    auto responseArea = getAnalyticsArea();
     auto w = responseArea.getWidth();
     
     auto& lowcut = monoChain.get<ChainPositions::LowCut>();
@@ -297,12 +295,135 @@ void ResponseCurveComponent::paint (juce::Graphics& g)
     }
     
     g.setColour(Colours::orange);
-    g.drawRoundedRectangle(responseArea.toFloat(), 4.f, 1.f);
+    g.drawRoundedRectangle(getRenderArea().toFloat(), 4.f, 1.f);
     
     g.setColour(Colours::white);
     g.strokePath(responseCurve, PathStrokeType(2.f));
 }
 
+void ResponseCurveComponent::resized()
+{
+    using namespace juce;
+    background = Image(Image::PixelFormat::RGB, getWidth(), getHeight(), true);
+    
+    Graphics g(background);
+    
+    Array<float> freqs
+    {
+        20, 50, 100,
+        200, 500, 1000,
+        2000, 5000, 10000,
+        20000
+    };
+    auto renderArea = getAnalyticsArea();
+    auto left = renderArea.getX();
+    auto right = renderArea.getRight();
+    auto top = renderArea.getY();
+    auto bottom = renderArea.getBottom();
+    auto width = renderArea.getWidth();
+    
+    Array<float> xs;
+    for (auto f : freqs)
+    {
+        auto normX = mapFromLog10(f, 20.f, 20000.f);
+        xs.add(left + width * normX);
+    }
+    
+    g.setColour(Colours::dimgrey);
+    
+    for (auto x : xs)
+    {
+        g.drawVerticalLine(x, top, bottom);
+    }
+    Array<float> gain
+    {
+        -24, -12, 0, 12, 24
+    };
+    
+    for (auto gDb : gain)
+    {
+        auto y = jmap(gDb, -24.f, 24.f, float(getHeight()), 0.f);
+        g.setColour(gDb == 0.f ? Colour(0u, 172u, 1u) : Colours::darkgrey);
+        g.drawHorizontalLine(y, left, right);
+    }
+    
+    //g.drawRect(getAnalyticsArea());
+    g.setColour(Colours::lightgrey);
+    const int fontHeight = 10;
+    g.setFont(fontHeight);\
+    
+    for (int i = 0; i < freqs.size(); ++i)
+    {
+        auto f = freqs[i];
+        auto x = xs[i];
+        
+        bool addK = false;
+        String str;
+        if (f > 999.f)
+        {
+            addK = true;
+            f /= 1000.f;
+        }
+        
+        str << f;
+        if (addK)
+            str << "k";
+        str << "Hz";
+        
+        auto textWidth = GlyphArrangement::getStringWidth(g.getCurrentFont(), str);
+        
+        Rectangle<int> r;
+        r.setSize(textWidth, fontHeight);
+        r.setCentre(x, 0);
+        r.setY(1);
+        
+        g.drawFittedText(str, r, juce::Justification::centred, 1);
+    }
+    for (auto gDb : gain)
+    {
+        auto y = jmap(gDb, -24.f, 24.f, float(bottom), float(top));
+        String str;
+        if (gDb > 0)
+            str << "+";
+        str << gDb;
+        
+        auto textWidth = GlyphArrangement::getStringWidth(g.getCurrentFont(), str);
+        
+        Rectangle<int> r;
+        r.setSize(textWidth, fontHeight);
+        r.setX(getWidth() - textWidth);
+        r.setCentre(r.getCentreX(), y);
+        
+        g.setColour(gDb == 0.f ? Colour(0u, 172u, 1u) : Colours::lightgrey);
+        g.drawFittedText(str, r, juce::Justification::centred, 1);
+        
+        str.clear();
+        str << (gDb - 24.f);
+        
+        r.setX(1);
+        textWidth = GlyphArrangement::getStringWidth(g.getCurrentFont(), str);
+        r.setSize(textWidth, fontHeight);
+        g.drawFittedText(str, r, juce::Justification::centred, 1);
+    }
+}
+
+juce::Rectangle<int> ResponseCurveComponent::getRenderArea()
+{
+    auto bounds = getLocalBounds();
+    bounds.removeFromTop(12);
+    bounds.removeFromBottom(2);
+    bounds.removeFromLeft(20);
+    bounds.removeFromRight(20);
+    return bounds;
+}
+
+juce::Rectangle<int> ResponseCurveComponent::getAnalyticsArea()
+{
+    auto bounds = getRenderArea();
+    bounds.removeFromTop(4);
+    bounds.removeFromBottom(4);
+    return bounds;
+}
 //==============================================================================
 BOYDEQAudioProcessorEditor::BOYDEQAudioProcessorEditor (BOYDEQAudioProcessor& p)
     : AudioProcessorEditor (&p), audioProcessor (p),
@@ -323,8 +444,6 @@ highCutFreqSliderAttachment(audioProcessor.apvts, "HighCut Freq", highCutFreqSli
 lowCutSlopeSliderAttachment(audioProcessor.apvts, "LowCut Slope", lowCutSlopeSlider),
 highCutSlopeSliderAttachment(audioProcessor.apvts, "HighCut Slope", highCutSlopeSlider)
 {
-    // Make sure that before the constructor has finished, you've set the
-    // editor's size to whatever you need it to be.
     peakFreqSlider.labels.add({0.f, "20Hz"});
     peakFreqSlider.labels.add({1.f, "20kHz"});
     
@@ -351,7 +470,7 @@ highCutSlopeSliderAttachment(audioProcessor.apvts, "HighCut Slope", highCutSlope
         addAndMakeVisible(comp);
     }
     
-    setSize (600, 400);
+    setSize (600, 480);
 }
 
 BOYDEQAudioProcessorEditor::~BOYDEQAudioProcessorEditor()
@@ -363,15 +482,11 @@ BOYDEQAudioProcessorEditor::~BOYDEQAudioProcessorEditor()
 void BOYDEQAudioProcessorEditor::paint (juce::Graphics& g)
 {
     using namespace juce;
-    // (Our component is opaque, so we must completely fill the background with a solid colour)
     g.fillAll (Colours::black);
 }
 
 void BOYDEQAudioProcessorEditor::resized()
 {
-    // This is generally where you'll want to lay out the positions of any
-    // subcomponents in your editor..
-    
     auto bounds = getLocalBounds();
     float hRatio = 25.f / 100.f;
     auto responseArea = bounds.removeFromTop(bounds.getHeight() * hRatio);
