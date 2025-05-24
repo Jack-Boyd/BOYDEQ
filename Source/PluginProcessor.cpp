@@ -105,6 +105,9 @@ void BOYDEQAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     rightChain.prepare(spec);
     
     updateFilters();
+    
+    leftChannelFifo.prepare(samplesPerBlock);
+    rightChannelFifo.prepare(samplesPerBlock);
 }
 
 void BOYDEQAudioProcessor::releaseResources()
@@ -166,6 +169,9 @@ void BOYDEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     
     leftChain.process(leftContext);
     rightChain.process(rightContext);
+    
+    leftChannelFifo.update(buffer);
+    rightChannelFifo.update(buffer);
 }
 
 //==============================================================================
